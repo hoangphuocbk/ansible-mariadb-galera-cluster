@@ -144,7 +144,7 @@
     inventory_hostname == galera_mysql_first_node
 
 - name: setup_cluster | cluster bootstrap - bootstrapping first node
-  ansible.builtin.command: "/usr/bin/galera_new_cluster"
+  ansible.builtin.command: "{{ mariadb_galera_new_cluster_cmd | default('/usr/bin/galera_new_cluster') }}"
   become: true
   when: >
     not galera_cluster_configured.stat.exists and

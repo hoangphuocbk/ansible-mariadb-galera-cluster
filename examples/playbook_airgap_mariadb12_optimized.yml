@@ -1,0 +1,110 @@
+---
+- name: Deploy MariaDB 12.x Galera Cluster (Air-Gap Mode)
+  hosts: galera_cluster
+  become: true
+  gather_facts: true
+
+  vars:
+    # ==================== Air-Gap Configuration ====================
+    mariadb_airgap_mode: true
+    
+    # Version - MariaDB 12.1.2 or later recommended
+    mariadb_version: "12.1.2"
+    mariadb_local_tarball_path: "/tmp/mariadb-12.1.2-linux-x86_64.tar.gz"
+    
+    # Installation Paths
+    mariadb_install_dir: "/usr/local"
+    mariadb_basedir: "/usr/local/mysql"
+    
+    # User/Group
+    mariadb_user: "mysql"
+    mariadb_group: "mysql"
+
+    # ==================== Performance Optimizations ====================
+    
+    # Memory Allocator (jemalloc recommended for MariaDB 12)
+    # Pre-install: apt install libjemalloc2 (or copy .deb in air-gap)
+    mariadb_malloc_lib: "/usr/lib/x86_64-linux-gnu/libjemalloc.so.2"
+
+    # System Tuning
+    mariadb_swappiness: 1
+    mariadb_max_open_files: 65535
+    mariadb_oom_score_adjust: -900
+
+    # Character Set (UTF8MB4 recommended)
+    mariadb_charset_server: "utf8mb4"
+    mariadb_collation_server: "utf8mb4_unicode_ci"
+    mariadb_charset_client: "utf8mb4"
+
+    # ==================== InnoDB Configuration ====================
+    
+    # Dynamic buffer pool sizing (75% of RAM)
+    mariadb_innodb_buffer_pool_size: "{{ (ansible_memtotal_mb * 0.75) | int }}M"
+    
+    # ==================== Advanced Configuration ====================
+    
+    mariadb_config_overrides:
+      mariadb:
+        # ===== InnoDB Settings =====
+        innodb_flush_method: "O_DIRECT"
+        innodb_log_file_size: "2G"  # Larger for write-heavy workloads
+        innodb_log_buffer_size: "64M"
+        innodb_io_capacity: 2000
+        innodb_io_capacity_max: 4000
+        innodb_use_native_aio: "ON"  # Enables io_uring on MariaDB 12
+        
+        # Buffer pool instances (min of vCPUs or 8)
+        innodb_buffer_pool_instances: "{{ [ansible_processor_vcpus | int, 8] | min }}"
+        innodb_buffer_pool_chunk_size: "128M"
+        
+        # ===== Thread Pool (Better than old one-thread-per-connection) =====
+        thread_handling: "pool-of-threads"
+        thread_pool_size: "{{ ansible_processor_vcpus }}"
+        thread_pool_max_threads: 2000
+        thread_cache_size: 256
+        
+        # ===== Query Cache (DISABLED for MariaDB 12) =====
+        query_cache_type: 0
+        query_cache_size: 0
+        
+        # ===== Connections =====
+        max_connections: 1000
+        max_allowed_packet: "256M"
+        
+        # ===== Galera Cluster Settings =====
+        wsrep_slave_threads: "{{ ansible_processor_vcpus }}"
+        wsrep_certify_nonPK: 1
+        wsrep_provider_options: "gcache.size=2G;gcache.page_size=1G"
+        
+        # ===== Binary Logging (for PITR) =====
+        log_bin: "/var/log/mysql/mysql-bin"
+        expire_logs_days: 7
+        sync_binlog: 1
+        max_binlog_size: "500M"
+        
+        # ===== Slow Query Log =====
+        slow_query_log: 1
+        long_query_time: 2
+        log_slow_verbosity: "query_plan,explain"
+        
+        # ===== Performance Schema =====
+        performance_schema: "ON"
+        performance_schema_consumer_events_statements_current: "ON"
+        
+        # ===== Security =====
+        symbolic_links: 0
+        local_infile: 0
+
+    # ==================== Galera Cluster Settings ====================
+    
+    galera_cluster_name: "production-cluster"
+    galera_cluster_nodes_group: "galera_cluster"
+    
+    # Network interface for cluster communication
+    galera_cluster_bind_interface: "eth0"
+    
+    # SST Method (mariabackup recommended for MariaDB 12)
+    galera_sst_method: "mariabackup"
+
+  roles:
+    - ansible-mariadb-galera-cluster

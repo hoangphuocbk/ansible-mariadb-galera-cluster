@@ -1,0 +1,57 @@
+[Unit]
+Description=MariaDB database server
+Documentation=man:mariadbd(8)
+Documentation=https://mariadb.com/kb/en/library/systemd/
+After=network.target
+After=syslog.target
+
+[Service]
+# Usage of Type=notify ensures that systemd waits until mariadbd is ready
+# This requires the binary to be compiled with systemd support
+Type=notify
+
+User={{ mariadb_user }}
+Group={{ mariadb_group }}
+
+{% if mariadb_malloc_lib %}
+Environment="LD_PRELOAD={{ mariadb_malloc_lib }}"
+{% endif %}
+
+# Variables for ExecStart
+Environment="MYSQL_HOME={{ mariadb_basedir }}"
+
+# Execute the daemon directly
+ExecStart={{ mariadb_basedir }}/bin/mariadbd --defaults-file=/etc/mysql/my.cnf --basedir={{ mariadb_basedir }} --datadir={{ mariadb_mysql_settings.datadir }} --pid-file=/run/mysql/mariadb.pid
+
+# Optional: ExecStartPost to unset WSREP variable if used in some scripts, 
+# though not strictly required by the standard guide, it was in previous version.
+# Keeping it minimal as per user request to follow guide.
+# But for Galera, clearing the state is often useful. 
+ExecStartPost=/bin/sh -c "systemctl unset-environment _WSREP_START_POSITION"
+
+# Safety: restart only on error
+Restart=on-failure
+RestartSec=5s
+
+# Timeout settings
+# It is recommended to use infinity for startup/shutdown to allow proper recovery
+TimeoutStartSec=infinity
+TimeoutStopSec=infinity
+
+# Place temp files in a secure directory, not /tmp
+PrivateTmp=true
+
+# Capability restrictions (optional but recommended for security)
+# ProtectSystem=full
+# ProtectHome=true
+
+# Limits and Optimizations
+
+# IO_URING Support
+# io_uring requires memory locking. Set to infinity to allow it.
+LimitMEMLOCK=infinity
+
+
+
+[Install]
+WantedBy=multi-user.target

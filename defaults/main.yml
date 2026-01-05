@@ -6,6 +6,19 @@
 # Define mariadb version
 mariadb_version: "10.11"
 
+# Airgap mode settings
+mariadb_airgap_mode: false
+
+mariadb_local_tarball_path: "" # If defined, copy from control node
+mariadb_install_dir: "/usr/local"
+mariadb_basedir: "/usr/local/mysql" # Symlink target or extraction dir
+mariadb_download_dir: "/tmp"
+mariadb_systemd_service_path: "/etc/systemd/system/mariadb.service"
+mariadb_user: "mysql"
+mariadb_group: "mysql"
+mariadb_malloc_lib: "" # Path to jemalloc/tcmalloc library, e.g. /usr/lib/x86_64-linux-gnu/libjemalloc.so.2
+mariadb_galera_new_cluster_cmd: "{{ (mariadb_airgap_mode | bool) | ternary(mariadb_basedir + '/bin/galera_new_cluster', '/usr/bin/galera_new_cluster') }}"
+
 # Defines if we should enable the MariaDB repo or use version within OS repos.
 galera_enable_mariadb_repo: true
 

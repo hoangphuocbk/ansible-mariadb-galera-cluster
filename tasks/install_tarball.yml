@@ -1,0 +1,123 @@
+---
+- name: install_tarball | ensure group mysql exists
+  ansible.builtin.group:
+    name: "{{ mariadb_group }}"
+    state: present
+
+- name: install_tarball | ensure user mysql exists
+  ansible.builtin.user:
+    name: "{{ mariadb_user }}"
+    group: "{{ mariadb_group }}"
+    create_home: false
+    shell: /bin/false
+    system: true
+    state: present
+
+- name: install_tarball | install dependencies
+  ansible.builtin.package:
+    name:
+      - libaio1
+      - numactl
+      - rsync
+      - google-perftools
+    state: present
+  ignore_errors: true # In strict airgap without local repo, this might fail, but libraries might be present.
+
+- name: install_tarball | ensure install directory exists
+  ansible.builtin.file:
+    path: "{{ mariadb_install_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: install_tarball | check if tarball already downloaded/exists
+  ansible.builtin.stat:
+    path: "{{ mariadb_download_dir }}/mariadb-binary.tar.gz"
+  register: tarball_stat
+
+- name: install_tarball | copy tarball from control node
+  ansible.builtin.copy:
+    src: "{{ mariadb_local_tarball_path }}"
+    dest: "{{ mariadb_download_dir }}/mariadb-binary.tar.gz"
+    mode: "0644"
+  when:
+    - mariadb_local_tarball_path | length > 0
+    - not tarball_stat.stat.exists
+
+- name: install_tarball | extract tarball
+  ansible.builtin.unarchive:
+    src: "{{ mariadb_download_dir }}/mariadb-binary.tar.gz"
+    dest: "{{ mariadb_install_dir }}"
+    remote_src: true
+    creates: "{{ mariadb_install_dir }}/mariadb-{{ mariadb_version }}-linux-x86_64" # Assumption on folder name
+  register: extract_result
+
+# Determine the extracted folder name if we don't know it exactly (some tarballs vary)
+- name: install_tarball | find extracted directory
+  ansible.builtin.find:
+    paths: "{{ mariadb_install_dir }}"
+    patterns: "mariadb-*-linux-*"
+    file_type: directory
+  register: found_mariadb_dir
+  when: extract_result.changed
+
+- name: install_tarball | set fact for extracted path
+  ansible.builtin.set_fact:
+    _mariadb_extracted_path: "{{ found_mariadb_dir.files[0].path if extract_result.changed else mariadb_install_dir + '/mariadb-' + mariadb_version + '-linux-x86_64' }}"
+
+- name: install_tarball | create symlink
+  ansible.builtin.file:
+    src: "{{ _mariadb_extracted_path | default(mariadb_install_dir + '/mariadb-' + mariadb_version + '-linux-x86_64') }}"
+    dest: "{{ mariadb_basedir }}"
+    state: link
+
+- name: install_tarball | ensure directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ mariadb_user }}"
+    group: "{{ mariadb_group }}"
+    mode: "0755"
+  with_items:
+    - /etc/mysql
+    - /etc/mysql/conf.d
+    - "{{ mariadb_mysql_settings.datadir }}"
+    - "{{ mariadb_mysql_settings.log_error | dirname }}"
+    - /var/run/mysql
+
+- name: install_tarball | change ownership of basedir
+  ansible.builtin.file:
+    path: "{{ mariadb_basedir }}"
+    owner: "{{ mariadb_user }}"
+    group: "{{ mariadb_group }}"
+    recurse: true
+
+- name: install_tarball | initialize database
+  ansible.builtin.command:
+    cmd: "./scripts/mariadb-install-db --user={{ mariadb_user }} --datadir={{ mariadb_mysql_settings.datadir }}"
+    chdir: "{{ mariadb_basedir }}"
+    creates: "{{ mariadb_mysql_settings.datadir }}/mysql"
+  become: true
+
+- name: install_tarball | install systemd service
+  ansible.builtin.template:
+    src: etc/mariadb.service.j2
+    dest: "{{ mariadb_systemd_service_path }}"
+    mode: "0644"
+  register: systemd_service
+
+- name: install_tarball | reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: systemd_service.changed
+
+- name: install_tarball | override specific facts for binary install
+  ansible.builtin.set_fact:
+    galera_wsrep_provider: "{{ mariadb_basedir }}/lib/galera/libgalera_smm.so"
+    # Overwrite library path if it's different in tarball (check lib/ vs lib64/)
+
+- name: install_tarball | add an overrides file
+  ansible.builtin.template:
+    src: "etc/mariadb_overrides.cnf.j2"
+    dest: "/etc/mysql/conf.d/overrides.cnf"
+    mode: "0644"
+  when: mariadb_config_overrides is defined

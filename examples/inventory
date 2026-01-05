@@ -1,0 +1,9 @@
+[galera_cluster]
+10.0.20.21
+10.0.20.22
+10.0.20.23
+
+[galera_cluster:vars]
+# Ensure these nodes are reachable and have Python installed
+ansible_user=ubuntu
+ansible_ssh_private_key_file=~/.ssh/id_rsa

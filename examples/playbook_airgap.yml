@@ -1,0 +1,62 @@
+---
+- name: Deploy MariaDB Galera Cluster (Airgap Mode)
+  hosts: galera_cluster
+  become: true
+  gather_facts: true
+
+  vars:
+    # Airgap Mode Enable
+    mariadb_airgap_mode: true
+    
+    # Version and Source
+    mariadb_version: "12.1.2-GA"
+    # Path to the binary tarball on the Ansible Control Node
+    # Ensure you have downloaded this file before running
+    mariadb_local_tarball_path: "/tmp/mariadb-12.1.2-linux-x86_64.tar.gz" 
+    
+    # Locations
+    mariadb_install_dir: "/usr/local"
+    mariadb_basedir: "/usr/local/mysql"
+    mariadb_data_dir: "/var/lib/mysql"
+
+    # User
+    mariadb_user: "mysql"
+    mariadb_group: "mysql"
+
+    # Optimization: Memory Allocator
+    # Ensure jemalloc is installed on targets or copied (libjemalloc2 on Ubuntu/Debian)
+    mariadb_malloc_lib: "/usr/lib/x86_64-linux-gnu/libjemalloc.so.2"
+
+    # Optimization: System Tuning
+    mariadb_swappiness: 1
+    mariadb_max_open_files: 65535
+    mariadb_omm_score_adjust: -900 # Protect from OOM killer
+
+    # Optimization: Configuration (my.cnf)
+    mariadb_innodb_buffer_pool_size: "10G" # Adjust based on RAM (e.g. 70-80% of RAM)
+    mariadb_innodb_mem_multiplier: 0.8
+    
+    mariadb_config_overrides:
+      mariadb:
+        # Performance
+        performance_schema: "ON"
+        innodb_flush_method: "O_DIRECT"
+        innodb_log_file_size: "1G"
+        innodb_io_capacity: 1000
+        innodb_io_capacity_max: 2000
+        
+        # Connections
+        max_connections: 1000
+        thread_cache_size: 100
+        
+        # Galera
+        wsrep_slave_threads: 8
+        wsrep_certify_nonPK: 1
+        
+        # Logging
+        log_error: "/var/log/mysql/error.log"
+        slow_query_log: 1
+        long_query_time: 2
+
+  roles:
+    - ansible-mariadb-galera-cluster
