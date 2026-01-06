@@ -8,7 +8,7 @@ mariadb_version: "10.11"
 
 # Airgap mode settings
 mariadb_airgap_mode: false
-
+mariadb_tarball_url: "" # URL or path to tarball
 mariadb_local_tarball_path: "" # If defined, copy from control node
 mariadb_install_dir: "/usr/local"
 mariadb_basedir: "/usr/local/mysql" # Symlink target or extraction dir

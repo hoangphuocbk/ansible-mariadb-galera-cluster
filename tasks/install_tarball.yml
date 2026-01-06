@@ -13,15 +13,15 @@
     system: true
     state: present
 
-- name: install_tarball | install dependencies
-  ansible.builtin.package:
-    name:
-      - libaio1
-      - numactl
-      - rsync
-      - google-perftools
-    state: present
-  ignore_errors: true # In strict airgap without local repo, this might fail, but libraries might be present.
+# - name: install_tarball | install dependencies
+#   ansible.builtin.package:
+#     name:
+#       # - libaio1
+#       - numactl
+#       - rsync
+#       # - google-perftools
+#     state: present
+#   ignore_errors: true # In strict airgap without local repo, this might fail, but libraries might be present.
 
 - name: install_tarball | ensure install directory exists
   ansible.builtin.file:
@@ -69,6 +69,7 @@
     src: "{{ _mariadb_extracted_path | default(mariadb_install_dir + '/mariadb-' + mariadb_version + '-linux-x86_64') }}"
     dest: "{{ mariadb_basedir }}"
     state: link
+  ignore_errors: true
 
 - name: install_tarball | ensure directories exist
   ansible.builtin.file:
@@ -87,6 +88,7 @@
 - name: install_tarball | change ownership of basedir
   ansible.builtin.file:
     path: "{{ mariadb_basedir }}"
+    state: directory
     owner: "{{ mariadb_user }}"
     group: "{{ mariadb_group }}"
     recurse: true
@@ -112,7 +114,7 @@
 
 - name: install_tarball | override specific facts for binary install
   ansible.builtin.set_fact:
-    galera_wsrep_provider: "{{ mariadb_basedir }}/lib/galera/libgalera_smm.so"
+    galera_wsrep_provider: "{{ mariadb_basedir }}/lib/libgalera_smm.so"
     # Overwrite library path if it's different in tarball (check lib/ vs lib64/)
 
 - name: install_tarball | add an overrides file

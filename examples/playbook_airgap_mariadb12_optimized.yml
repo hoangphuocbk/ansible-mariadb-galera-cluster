@@ -75,7 +75,12 @@
         wsrep_slave_threads: "{{ ansible_processor_vcpus }}"
         wsrep_certify_nonPK: 1
         wsrep_provider_options: "gcache.size=2G;gcache.page_size=1G"
-        
+
+        # Fix for MariaDB 11.4+/12.x warning about slave_connections_needed_for_purge
+        # Set to 0 for pure Galera (no async replication slaves)
+        # Set to 1+ if this node is also a master for external async replicas
+        slave_connections_needed_for_purge: 0
+
         # ===== Binary Logging (for PITR) =====
         log_bin: "/var/log/mysql/mysql-bin"
         expire_logs_days: 7
