@@ -1,0 +1,135 @@
+---
+- name: install_tarball | Create mariadb group
+  ansible.builtin.group:
+    name: "{{ mariadb_group | default('mysql') }}"
+    state: present
+    system: true
+  become: true
+
+- name: install_tarball | Create mariadb user
+  ansible.builtin.user:
+    name: "{{ mariadb_user | default('mysql') }}"
+    group: "{{ mariadb_group | default('mysql') }}"
+    system: true
+    shell: /bin/false
+  become: true
+
+- name: install_tarball | Install dependencies
+  ansible.builtin.apt:
+    name:
+      # - libaio1
+      - libncurses6
+      - rsync
+      - openssl
+    state: present
+    update_cache: true
+  become: true
+
+- name: install_tarball | Ensure install directory parent exists
+  ansible.builtin.file:
+    path: "/usr/local"
+    state: directory
+    mode: "0755"
+  become: true
+
+- name: install_tarball | Check if tarball already extracted
+  ansible.builtin.stat:
+    path: "/usr/local/{{ (mariadb_tarball_path | basename).replace('.tar.gz', '') }}/bin/mariadbd"
+  register: _mariadb_extracted
+  become: true
+
+- name: install_tarball | Unarchive MariaDB tarball
+  ansible.builtin.unarchive:
+    src: "{{ mariadb_tarball_path }}"
+    dest: "/usr/local"
+    remote_src: "{{ mariadb_tarball_remote | default(false) }}"
+    owner: "{{ mariadb_user | default('mysql') }}"
+    group: "{{ mariadb_group | default('mysql') }}"
+  become: true
+  when: not _mariadb_extracted.stat.exists
+
+- name: install_tarball | Check if symlink exists
+  ansible.builtin.stat:
+    path: "{{ mariadb_install_dir | default('/usr/local/mysql') }}"
+  register: _mariadb_symlink
+  become: true
+
+- name: install_tarball | Create symlink to {{ mariadb_install_dir | default('/usr/local/mysql') }}
+  ansible.builtin.file:
+    src: "/usr/local/{{ (mariadb_tarball_path | basename).replace('.tar.gz', '') }}"
+    dest: "{{ mariadb_install_dir | default('/usr/local/mysql') }}"
+    state: link
+    owner: "{{ mariadb_user | default('mysql') }}"
+    group: "{{ mariadb_group | default('mysql') }}"
+  become: true
+  when: not _mariadb_symlink.stat.exists
+
+- name: install_tarball | Create required directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ mariadb_user | default('mysql') }}"
+    group: "{{ mariadb_group | default('mysql') }}"
+    mode: "0755"
+  loop:
+    - "/etc/mysql"
+    - "/etc/mysql/conf.d"
+    - "{{ mariadb_mysql_settings.datadir | default('/var/lib/mysql') }}"
+    - "{{ (mariadb_mysql_settings.log_error | default('/var/log/mysql/error.log')) | dirname }}"
+    - "/run/mysqld"
+  become: true
+
+- name: install_tarball | Deploy my.cnf configuration
+  ansible.builtin.template:
+    src: "etc/mysql/my.cnf.j2"
+    dest: "/etc/mysql/my.cnf"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+# - name: install_tarball | Deploy galera.cnf configuration
+#   ansible.builtin.template:
+#     src: "etc/mysql/conf.d/galera.cnf.j2"
+#     dest: "/etc/mysql/conf.d/galera.cnf"
+#     owner: root
+#     group: root
+#     mode: "0644"
+#   become: true
+
+- name: install_tarball | Initialize MySQL data directory
+  ansible.builtin.command:
+    cmd: "{{ mariadb_install_dir | default('/usr/local/mysql') }}/scripts/mysql_install_db --basedir={{ mariadb_install_dir | default('/usr/local/mysql') }} --user={{ mariadb_user | default('mysql') }} --datadir={{ mariadb_mysql_settings.datadir | default('/var/lib/mysql') }}"
+    creates: "{{ mariadb_mysql_settings.datadir | default('/var/lib/mysql') }}/mysql"
+  become: true
+
+# - name: install_tarball | Setup systemd service
+#   ansible.builtin.template:
+#     src: mariadb_binary.service.j2
+#     dest: /etc/systemd/system/{{ mariadb_systemd_service_name | default('mariadb.service') }}
+#     mode: "0644"
+#   become: true
+#   notify:
+#     - restart mariadb
+
+# - name: install_tarball | Enable and start MariaDB service
+#   ansible.builtin.systemd:
+#     name: "{{ mariadb_systemd_service_name | default('mariadb.service') }}"
+#     enabled: true
+#     state: started
+#     daemon_reload: true
+#   become: true
+
+- name: install_tarball | Change owner of data directory
+  ansible.builtin.file:
+    path: "{{ mariadb_mysql_settings.datadir | default('/var/lib/mysql') }}"
+    state: directory
+    owner: "{{ mariadb_user | default('mysql') }}"
+    group: "{{ mariadb_group | default('mysql') }}"
+    recurse: true
+  become: true
+
+- name: install_tarball | Set galera provider path fact
+  ansible.builtin.set_fact:
+    galera_wsrep_provider: "{{ mariadb_install_dir | default('/usr/local/mysql') }}/lib/libgalera_enterprise_smm.so"
+  when: galera_wsrep_provider is not defined or galera_wsrep_provider == '/usr/lib/galera/libgalera_smm.so'

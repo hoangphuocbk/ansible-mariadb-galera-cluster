@@ -22,7 +22,9 @@
     signed_by: "{{ mariadb_debian_repo_key }}"
     state: present
   become: true
-  when: galera_enable_mariadb_repo|bool
+  when:
+    - galera_enable_mariadb_repo|bool
+    - mariadb_install_method | default('repo') == 'repo'
 
 - name: debian | precreate /etc/mysql/conf.d in case we need to add mariadb_config_overrides file
   ansible.builtin.file:
@@ -41,3 +43,7 @@
   when: mariadb_config_overrides is defined
 
 - ansible.builtin.import_tasks: mariadb_packages_install.yml
+  when: mariadb_install_method | default('repo') == 'repo'
+
+- ansible.builtin.include_tasks: install_tarball.yml
+  when: mariadb_install_method | default('repo') == 'tarball'

@@ -1,0 +1,19 @@
+all:
+  children:
+    galera-cluster-nodes:
+      hosts:
+        10.0.20.21:
+        10.0.20.22:
+        10.0.20.23:
+      vars:
+        ansible_user: vagrant
+        ansible_ssh_private_key_file: ~/.ssh/id_rsa
+        mariadb_install_dir: /usr/local/mysql
+        mariadb_install_method: tarball
+        mariadb_user: mariadb
+        mariadb_group: mariadb
+        mariadb_sst_username: "{{ mariadb_user }}"
+        mariadb_tarball_path: "{{ playbook_dir }}/mariadb-enterprise-11.8.5-2-noble-x86_64.tar.gz"
+        galera_cluster_bind_interface: eth1
+        galera_cluster_name: "example-cluster"
+        galera_reconfigure_galera: true

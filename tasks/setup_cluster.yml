@@ -17,8 +17,8 @@
   ansible.builtin.file:
     path: "{{ mariadb_certificates_dir }}"
     state: "directory"
-    owner: "mysql"
-    group: "mysql"
+    owner: "{{ mariadb_user | default('mysql') }}"
+    group: "{{ mariadb_group | default('mysql') }}"
     mode: "0500"
   become: true
   when:
@@ -29,8 +29,8 @@
   ansible.builtin.copy:
     content: "{{ item.value.content }}"
     dest: "{{ mariadb_certificates_dir }}/{{ item.value.name }}"
-    owner: "mysql"
-    group: "mysql"
+    owner: "{{ mariadb_user | default('mysql') }}"
+    group: "{{ mariadb_group | default('mysql') }}"
     mode: "0400"
     backup: true
   with_dict: "{{ mariadb_tls_files }}"
@@ -144,7 +144,7 @@
     inventory_hostname == galera_mysql_first_node
 
 - name: setup_cluster | cluster bootstrap - bootstrapping first node
-  ansible.builtin.command: "/usr/bin/galera_new_cluster"
+  ansible.builtin.command: "/usr/local/{{ (mariadb_tarball_path | basename).replace('.tar.gz', '') }}/bin/galera_new_cluster"
   become: true
   when: >
     not galera_cluster_configured.stat.exists and

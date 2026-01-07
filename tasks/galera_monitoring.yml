@@ -3,8 +3,8 @@
   ansible.builtin.template:
     src: "etc/mysql/{{ galera_monitor_script_name }}.j2"
     dest: "{{ galera_monitor_script_path }}/{{ galera_monitor_script_name }}"
-    owner: "mysql"
-    group: "mysql"
+    owner: "{{ mariadb_user | default('mysql') }}"
+    group: "{{ mariadb_group | default('mysql') }}"
     mode: "u=rwx,g=rwx,o="
   become: true
   register: galera_monitoring_updated

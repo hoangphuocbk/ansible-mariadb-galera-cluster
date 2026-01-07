@@ -1,0 +1,8 @@
+---
+- name: Deploy MariaDB Galera Cluster (Binary Install)
+  hosts: galera-cluster-nodes
+  become: true
+  tasks:
+    - name: Include MariaDB Galera Cluster Role
+      include_role:
+        name: ../../ansible-mariadb-galera-cluster

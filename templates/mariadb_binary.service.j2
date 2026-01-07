@@ -1,0 +1,106 @@
+# {{ ansible_managed }}
+# Based on MariaDB tarball support-files/systemd/mariadb.service
+
+[Unit]
+Description=MariaDB {{ mariadb_version | default('11.8.5-2') }} database server
+Documentation=man:mariadbd(8)
+Documentation=https://mariadb.com/kb/en/library/systemd/
+After=network.target
+
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+
+##############################################################################
+## Core requirements
+##
+
+Type=notify
+
+# Setting this to true can break replication and the Type=notify settings
+# See also bind-address mariadbd option.
+PrivateNetwork=false
+
+##############################################################################
+## Package maintainers
+##
+
+User={{ mariadb_user | default('mysql') }}
+Group={{ mariadb_group | default('mysql') }}
+
+# CAP_IPC_LOCK To allow memlock to be used as non-root user
+AmbientCapabilities=CAP_IPC_LOCK
+
+# Prevent writes to /usr, /boot, and /etc
+ProtectSystem=full
+
+# Database dir should be writable even when ProtectSystem=full prevents it
+ReadWritePaths=-{{ mariadb_mysql_settings.datadir | default('/var/lib/mysql') }}
+ReadWritePaths=-{{ (mariadb_mysql_settings.log_error | default('/var/log/mysql/error.log')) | dirname }}
+ReadWritePaths=-/run/mysqld
+
+# Prevent accessing /home, /root and /run/user
+ProtectHome=true
+
+# Use an environment file to pass variable _WSREP_NEW_CLUSTER
+EnvironmentFile=-/tmp/wsrep-new-cluster
+
+# Use an environment file to pass variable _WSREP_START_POSITION
+EnvironmentFile=-/tmp/wsrep-start-position
+
+# Perform automatic wsrep recovery.
+ExecStartPre=/bin/sh -c "[ ! -e {{ mariadb_install_dir | default('/usr/local/mysql') }}/bin/galera_recovery ] && VAR= || \
+ VAR=`{{ mariadb_install_dir | default('/usr/local/mysql') }}/bin/galera_recovery`; [ $? -eq 0 ] \
+ && echo _WSREP_START_POSITION=$VAR > /tmp/wsrep-start-position || exit 1"
+
+# Start main service
+# MYSQLD_OPTS here is for users to set in /etc/systemd/system/mariadb.service.d/MY_SPECIAL.conf
+ExecStart={{ mariadb_install_dir | default('/usr/local/mysql') }}/bin/mariadbd $MYSQLD_OPTS $_WSREP_NEW_CLUSTER $_WSREP_START_POSITION
+
+# Unset _WSREP_START_POSITION/_WSREP_NEW_CLUSTER environment variable.
+ExecStartPost=/bin/rm -f /tmp/wsrep-start-position /tmp/wsrep-new-cluster
+
+KillSignal=SIGTERM
+
+# Don't want to see an automated SIGKILL ever
+SendSIGKILL=no
+
+# Restart crashed server only
+Restart=on-abnormal
+RestartSec=5s
+
+UMask=007
+
+##############################################################################
+## USERs can override
+##
+
+# Kernels like killing mariadbd when out of memory because its big.
+{% if mariadb_oom_score_adjust | default(0) != 0 %}
+OOMScoreAdjust={{ mariadb_oom_score_adjust }}
+{% endif %}
+
+# If you don't use the /tmp directory for SELECT ... OUTFILE and
+# LOAD DATA INFILE you can enable PrivateTmp=true for a little more security.
+PrivateTmp=false
+
+# Set an explicit Start and Stop timeout of 900 seconds (15 minutes!)
+{% if mariadb_timeout_start_sec | default(0) != 0 %}
+TimeoutStartSec={{ mariadb_timeout_start_sec }}
+{% else %}
+TimeoutStartSec=900
+{% endif %}
+TimeoutStopSec=900
+
+# Set the maximium number of tasks (threads) to 99% of what the system can handle
+TasksMax=99%
+
+# Number of files limit
+{% if mariadb_max_open_files | default(0) != 0 %}
+LimitNOFILE={{ mariadb_max_open_files }}
+{% else %}
+LimitNOFILE=32768
+{% endif %}
+# For liburing and io_uring_setup()
+LimitMEMLOCK=524288
